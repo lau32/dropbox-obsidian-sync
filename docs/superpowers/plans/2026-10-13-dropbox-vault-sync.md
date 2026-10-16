@@ -493,12 +493,13 @@ export function plan(input: PlanInput): Action[]
 Rules:
 - Changed: `localChanged = local.contentHash !== base.contentHash`; `remoteChanged = remote.contentHash !== base.contentHash`. Uploads over an existing remote use `update(remote.rev)`; new remote files use `add`.
 - Decision table: spec §4.2 verbatim. Both changed with different hashes: config path → `conflict newerWins`; `.md` → `merge`; else `conflict copy`. No base, both present, different: config → `newerWins`, else `copy`.
+- Case-only rename at the same key (`B`, `L`, `R` all present and content unchanged): if `L.path !== B.path && R.path === B.path`, emit `moveRemote(B.path, L.path)`; if `R.path !== B.path && L.path === B.path`, emit `moveLocal(B.path, R.path)`.
 - Folders: existence only; mkdir on the missing side, rmdir when deleted on one side and unchanged on the other; type mismatch (file vs folder at one key) → `skip`.
 - Renames: pair a one-sided delete with a one-sided create on the **same** side having equal `contentHash` → `moveRemote` (local rename) or `moveLocal` (remote rename). If several candidates share a hash, pair only those named by `renameHints`; others stay delete + create.
 - Output order: `mkdir*` (shallowest first) → `move*` → `upload`/`download`/`record` → `merge`/`conflict` → `deleteLocal`/`deleteRemote` → `dropRecord` → `rmdir*` (deepest first) → `skip`.
 
 - [ ] **Step 1: Write the failing tests.** Test helpers in the test file:
-  - `snap(spec: Record<string, { base?: string; local?: string; remote?: string; baseRev?: string; remoteRev?: string; folder?: boolean }>, hints = []): PlanInput` — builds a `Snapshot` where each present side has that `contentHash` (revs default to `'r-' + hash`), `isConfigPath = p => p.startsWith('.obsidian/')`.
+  - `snap(spec: Record<string, { base?: string; local?: string; remote?: string; basePath?: string; localPath?: string; remotePath?: string; baseRev?: string; remoteRev?: string; folder?: boolean }>, hints = []): PlanInput` — builds a `Snapshot` where each present side has that `contentHash` (revs default to `'r-' + hash`), `isConfigPath = p => p.startsWith('.obsidian/')`.
   - `one(s, path = 'n.md') = plan(snap({ [path]: s })).map(a => a.kind)`.
 
 ```ts
@@ -530,6 +531,12 @@ test('local rename is one moveRemote', () =>
   expect(plan(snap({ 'a.md': { base: 'h0', remote: 'h0' }, 'b.md': { local: 'h0' } }))).toEqual([{ kind: 'moveRemote', from: 'a.md', to: 'b.md' }]));
 test('remote rename is one moveLocal', () =>
   expect(plan(snap({ 'a.md': { base: 'h0', local: 'h0' }, 'b.md': { remote: 'h0' } }))).toEqual([{ kind: 'moveLocal', from: 'a.md', to: 'b.md' }]));
+test('case-only rename locally produces moveRemote', () =>
+  expect(plan(snap({ 'note.md': { base: 'h0', local: 'h0', remote: 'h0', basePath: 'note.md', remotePath: 'note.md', localPath: 'Note.md' } })))
+    .toEqual([{ kind: 'moveRemote', from: 'note.md', to: 'Note.md' }]));
+test('case-only rename remotely produces moveLocal', () =>
+  expect(plan(snap({ 'note.md': { base: 'h0', local: 'h0', remote: 'h0', basePath: 'note.md', localPath: 'note.md', remotePath: 'Note.md' } })))
+    .toEqual([{ kind: 'moveLocal', from: 'note.md', to: 'Note.md' }]));
 test('folder rename of 20 files → 20 moves, 0 deletes', () => {
   const s: Parameters<typeof snap>[0] = {};
   for (let i = 0; i < 20; i++) { s[`old/${i}.md`] = { base: `h${i}`, remote: `h${i}` }; s[`new/${i}.md`] = { local: `h${i}` }; }
@@ -566,18 +573,19 @@ For the type-mismatch case, `snap` marks only the remote side as a folder when `
 - Test: `test/unit/guardrails.test.ts`
 
 **Interfaces:**
-- Consumes: `Action` (Task 8).
+- Consumes: `Action` (Task 8), `Snapshot` (Task 7).
 - Produces:
 ```ts
-export interface PlanSummary { uploads: number; downloads: number; moves: number; merges: number; conflicts: number;
+export interface PlanSummary { baseCount: number; uploads: number; downloads: number; moves: number; merges: number; conflicts: number;
   deletesLocal: string[]; deletesRemote: string[]; configOverwrites: string[] }
 export interface GuardContext { baseCount: number; localCount: number; remoteCount: number; maxDeletes: number; maxPercent: number }
 export type GuardResult = { ok: true } | { ok: false; reason: 'massChange' | 'emptyLocal' | 'emptyRemote'; summary: PlanSummary };
-export function summarize(actions: Action[]): PlanSummary;
+export function summarize(actions: Action[], baseCount?: number): PlanSummary;
 export function guard(actions: Action[], ctx: GuardContext): GuardResult;
-export function withoutDeletions(actions: Action[]): Action[]; // drops deleteLocal, deleteRemote, rmdirLocal, rmdirRemote, dropRecord
+export function withoutDeletions(actions: Action[], snap?: Snapshot): Action[];
 ```
-Destructive count = `deletesLocal + deletesRemote + configOverwrites` (newer-wins conflicts). `massChange` when count `> maxDeletes` or (`baseCount > 0` and count `> baseCount * maxPercent / 100`). `emptyLocal` when `baseCount > 0 && localCount === 0` (likewise remote); empty checks take precedence.
+Destructive count = `deletesLocal + deletesRemote + configOverwrites` (newer-wins conflicts). `baseCount`, `localCount`, and `remoteCount` count **files only** (excluding folder entries). `massChange` when count `> maxDeletes` or (`baseCount > 0` and count `> baseCount * maxPercent / 100`). `emptyLocal` when `baseCount > 0 && localCount === 0` (likewise remote); empty checks take precedence.
+`withoutDeletions(actions, snap)` drops `rmdirLocal`, `rmdirRemote`, `dropRecord`, and converts `deleteLocal` into `upload (add)` (so kept local files re-upload instead of re-triggering `deleteLocal` on the next run) and converts `deleteRemote` into `download` when `snap.remote` has the entry (or drops it if `snap` is omitted, while `dropRecord` clears any stale base).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -590,8 +598,12 @@ test('moves never trip', () => expect(guard(Array.from({ length: 50 }, (_, i) =>
 test('empty local with base trips', () => expect(guard(dels(5), ctx({ localCount: 0 }))).toMatchObject({ reason: 'emptyLocal' }));
 test('empty remote with base trips', () => expect(guard([], ctx({ remoteCount: 0 }))).toMatchObject({ reason: 'emptyRemote' }));
 test('first sync never trips', () => expect(guard([], ctx({ baseCount: 0, localCount: 0 })).ok).toBe(true));
-test('withoutDeletions keeps transfers', () => expect(withoutDeletions([...dels(2), { kind: 'upload', path: 'x', mode: { kind: 'add' } }]).map(a => a.kind)).toEqual(['upload']));
-test('summarize counts config overwrites', () => expect(summarize([{ kind: 'conflict', path: '.obsidian/app.json', strategy: 'newerWins' }]).configOverwrites).toEqual(['.obsidian/app.json']));
+test('withoutDeletions converts deleteLocal to upload add and drops deleteRemote without snap', () =>
+  expect(withoutDeletions([{ kind: 'deleteLocal', path: 'k.md' }, ...dels(2), { kind: 'upload', path: 'x', mode: { kind: 'add' } }]))
+    .toEqual([{ kind: 'upload', path: 'x', mode: { kind: 'add' } }, { kind: 'upload', path: 'k.md', mode: { kind: 'add' } }]));
+test('summarize counts config overwrites and stores baseCount', () =>
+  expect(summarize([{ kind: 'conflict', path: '.obsidian/app.json', strategy: 'newerWins' }], 42))
+    .toMatchObject({ baseCount: 42, configOverwrites: ['.obsidian/app.json'] }));
 ```
 
 - [ ] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
@@ -622,7 +634,7 @@ Behaviour per action (commit = `state.commit(record, text)` after the side effec
 - `download`: `local.stat`; if the file exists and differs from `snap.local` (size or mtime) → `deferred`. Else download, write with `mtime = serverModified`, commit.
 - `record`: commit from snapshot local + remote (+ text for `.md`).
 - `merge`: base text from `state.getBaseText`, else `remote.downloadRev(path, base.rev)`, else handle as `conflict copy`. Clean → write locally, `upload update(remote.rev)`, commit merged text, add to `merged`. Overlap → `conflict copy`.
-- `conflict copy`: download remote → write to `conflictName(path, now(), deviceName)` locally and `upload add` it (commit both records) → upload local at `path` with `update(remote.rev)` → commit. Add the copy path to `conflicts`.
+- `conflict copy`: download remote → pick `copyPath = conflictName(path, now(), deviceName)` (if `copyPath` already exists locally or on remote, append ` 2`, ` 3`, … before the closing `)` to avoid collision) → write locally and `upload add` it (commit both records) → upload local at `path` with `update(remote.rev)` → commit. Add `copyPath` to `conflicts`.
 - `conflict newerWins`: winner = larger of `local.mtime` and `remote.serverModified`. Loser's bytes are written to `${configConflictDir}/${conflictName(path, now(), deviceName)}`; winner propagated to the other side; commit.
 - `deleteRemote`: `remote.delete(path, rev)` → `state.remove`. `RevConflictError` → `deferred`.
 - `deleteLocal`: re-stat; changed since snapshot → `deferred`; else `local.trash` → `state.remove`.
@@ -640,6 +652,7 @@ Behaviour per action (commit = `state.commit(record, text)` after the side effec
   - `'clean merge writes merged text on both sides and as base'`.
   - `'merge without stored base uses downloadRev'`: `state.commit(rec, null)` before; result clean.
   - `'overlap keeps local at path and remote in conflict copy'`: after execute, `vault.readText('n.md') === localText`, `vault.readText('n (conflict 2026-10-13 2142 Test).md') === remoteText`, same two files on `dropbox`.
+  - `'conflict copy disambiguates when same-minute copy already exists'`.
   - `'binary conflict copy naming'`.
   - `'config newerWins: remote newer overwrites local and keeps loser in plugin conflicts dir'`: `vault.readText('.obsidian/app.json') === remoteText`; loser under `.obsidian/plugins/dropbox-vault-sync/conflicts/.obsidian/app (conflict …).json`; nothing new under `.obsidian/` except that.
   - `'deleteLocal trashes and removes record'`.
@@ -673,7 +686,7 @@ export class SyncEngine {
   run(opts: { trigger: TriggerReason; approval?: 'all' | 'noDeletes'; onProgress?: (d: number, t: number) => void }): Promise<SyncOutcome>;
 }
 ```
-`run`: snapshot → plan → guard (skipped when `approval` given; `'noDeletes'` applies `withoutDeletions`) → execute → `setMeta({ lastSyncAt })` when not fatal → `appendLog(entry, 50)`. Case collisions and skips from the snapshot are added to the log's `errors`. Unexpected exceptions → `{ status: 'error' }` and logged.
+`run`: snapshot → plan → guard (`baseCount`, `localCount`, `remoteCount` count non-folder entries only; guard is skipped when `approval` given; `'noDeletes'` applies `withoutDeletions(actions, snap)`) → execute → `setMeta({ lastSyncAt })` when not fatal → `appendLog(entry, 50)`. Case collisions and skips from the snapshot are added to the log's `errors`. Unexpected exceptions → `{ status: 'error' }` and logged.
 
 - Produces (`test/sim/world.ts`): `createWorld(n: number, opts?)` → `{ dropbox: FakeDropbox; devices: Device[]; clock: { tick(ms: number): void } }` where `Device = { name: string; vault: FakeVault; state: MemoryStateStore; filter: PathFilter; sync(approval?): Promise<SyncOutcome>; setExcludes(globs: string[]): void }`; `syncAll(world, rounds = 4)` syncs every device in order per round (approving reviews only if `opts.autoApprove`); `assertConverged(world)` checks every device's synced files and the Dropbox root hold identical path → text maps.
 
@@ -687,7 +700,7 @@ export class SyncEngine {
   - A adds exclude `Archive/**` → `Archive/a.md` still on Dropbox and on B (Review Focus 3).
   - A disables the `core` config category after syncing `.obsidian/app.json` → file still on Dropbox and B.
   - Cursor expiry between syncs → converges.
-  - 30 remote deletes from B → A's automatic run returns `needsReview` with `reason: 'massChange'`; `approval: 'noDeletes'` keeps files.
+  - 30 remote deletes from B → A's automatic run returns `needsReview` with `reason: 'massChange'`; `approval: 'noDeletes'` keeps files and re-uploads them so subsequent automatic runs on A succeed without re-triggering `needsReview`.
 - [ ] **Step 2: Write crash tests** (`crash.test.ts`): build a 3-file divergent scenario; for every `k` from 0 to 12, create a world where A's vault uses `failAfter: k` for one run, run A (expect `status: 'error'` or `'ok'`), then clear the fault, `syncAll`, `assertConverged`, and assert every edit token still exists.
 - [ ] **Step 3: Write the property test** (`property.test.ts`, `fc.assert(..., { numRuns: 200 })`): commands over 3 devices and paths `['a.md', 'b.md', 'd/c.md', 'img.png']`: `create`, `append` (adds a unique line `t<n>`), `delete`, `rename`, `sync`. Edits are append-only so tokens are only removed by user deletes. Track "allowed lost" tokens: tokens present in a file on the device that deleted it at delete time. After `syncAll`: (1) `assertConverged`; (2) every token not in "allowed lost" appears in some file on some device.
 - [ ] **Step 4: Run** `npx vitest run test/sim` — Expected: FAIL (`SyncEngine` missing).
@@ -754,11 +767,15 @@ Error mapping: thrown by `http` → `NetworkError`; 401 → `refreshAccessToken(
 export function randomVerifier(): string;                     // 64 chars, base64url, crypto.getRandomValues
 export async function challengeFor(verifier: string): Promise<string>; // base64url(SHA-256(verifier)), no padding
 export const REDIRECT_URI = 'obsidian://dropbox-vault-sync-auth';
+export interface PendingAuthState { verifier: string; mode: 'redirect' | 'manual' }
 export class DropboxAuth {
   constructor(opts: { http: HttpClient; appKey: string; getRefreshToken: () => string | null;
-    saveConnection: (refreshToken: string | null, accountEmail: string | null) => Promise<void>; now?: () => number });
-  beginAuth(mode: 'redirect' | 'manual'): Promise<string>;   // authorize URL; keeps verifier in memory
-  completeAuth(code: string): Promise<void>;                 // token exchange, then users/get_current_account for email
+    saveConnection: (refreshToken: string | null, accountEmail: string | null) => Promise<void>;
+    getPendingAuth?: () => PendingAuthState | null;
+    savePendingAuth?: (pending: PendingAuthState | null) => Promise<void>;
+    now?: () => number });
+  beginAuth(mode: 'redirect' | 'manual'): Promise<string>;   // authorize URL; keeps verifier in memory and persists via savePendingAuth
+  completeAuth(code: string): Promise<void>;                 // token exchange (falls back to getPendingAuth if restarted on mobile), then users/get_current_account for email
   getAccessToken(): Promise<string>;                         // cached until 60 s before expiry
   refreshAccessToken(): Promise<string>;
   disconnect(): Promise<void>;                               // auth/token/revoke (best effort), saveConnection(null, null)
@@ -769,7 +786,8 @@ Authorize URL: `https://www.dropbox.com/oauth2/authorize?client_id&response_type
 - [ ] **Step 1: Write the failing tests**
   - `challengeFor(v)` equals `createHash('sha256').update(v).digest('base64url')` (node oracle); `randomVerifier()` matches `/^[A-Za-z0-9_-]{64}$/`.
   - authorize URL params for both modes (`redirect_uri` present/absent).
-  - `completeAuth('c')` posts `grant_type=authorization_code`, `code=c`, `client_id`, `code_verifier` (and `redirect_uri` in redirect mode); saves refresh token and email.
+  - `completeAuth('c')` posts `grant_type=authorization_code`, `code=c`, `client_id`, `code_verifier` (and `redirect_uri` in redirect mode); saves refresh token and email; clears pending auth.
+  - `completeAuth` succeeds on a fresh `DropboxAuth` instance using persisted `getPendingAuth()` (simulating mobile app reload during browser redirect).
   - `getAccessToken` twice → one token request; after advancing `now` past expiry → refresh request with `grant_type=refresh_token`.
   - refresh returns 400 `invalid_grant` → `AuthError`, `saveConnection(null, null)` called.
   - no refresh token → `getAccessToken` throws `AuthError`.
@@ -785,10 +803,15 @@ Authorize URL: `https://www.dropbox.com/oauth2/authorize?client_id&response_type
 - Test: `test/unit/Scheduler.test.ts`
 
 **Interfaces:**
-- Consumes: `TriggerReason`.
+- Consumes: `TriggerReason`, `toKey`.
 - Produces:
 ```ts
-export class SelfWriteTracker { constructor(windowMs?: number /* 5000 */, now?: () => number); mark(path: string): void; isSelfWrite(path: string): boolean }
+export class SelfWriteTracker {
+  constructor(windowMs?: number /* 5000 */, now?: () => number);
+  mark(path: string): void;
+  begin(path: string): () => void; // marks path as actively being written; returned fn marks completion timestamp
+  isSelfWrite(path: string): boolean; // normalizes via toKey(path); true while active or within windowMs after completion
+}
 export interface TriggerSettings { onStartup: boolean; onResume: boolean; onEdit: boolean; editDebounceSec: number; interval: boolean; intervalMin: number; longpoll: boolean }
 export class Scheduler {
   constructor(opts: { run: (t: TriggerReason) => Promise<void>; settings: () => TriggerSettings; isPaused: () => boolean;
@@ -805,6 +828,7 @@ Mutex: one run at a time; triggers during a run set a single pending follow-up (
 - [ ] **Step 1: Write the failing tests** (`vi.useFakeTimers()`):
   - three `notifyLocalChange` calls 2 s apart → exactly one run, 10 s after the last.
   - `selfWrites.mark('a.md')` then `notifyLocalChange('a.md')` → no run; after 5 s window `notifyLocalChange('a.md')` → run (Review Focus 4).
+  - `const end = selfWrites.begin('A.md')` across a 10 s write → `isSelfWrite('a.md')` is true during the 10 s write and for 5 s after `end()`.
   - trigger during a running run → exactly one follow-up run.
   - `isPaused() === true` → interval and edits produce no runs; `requestManual()` runs.
   - `interval: false` → advancing 30 min produces no runs; `true` → one run per 5 min.
@@ -829,6 +853,7 @@ Mutex: one run at a time; triggers during a run set a single pending follow-up (
 // settings.ts
 export interface DropboxSyncSettings {
   appKey: string; refreshToken: string | null; accountEmail: string | null;
+  pendingAuth: PendingAuthState | null;
   remoteFolder: string; deviceName: string; triggers: TriggerSettings; configSync: ConfigSyncSettings;
   excludes: string[]; maxFileSizeMB: number; baseSizeCapMB: number; guard: { maxDeletes: number; maxPercent: number }; verboseLogging: boolean;
 }
@@ -846,9 +871,9 @@ export const obsidianHttp: HttpClient; // requestUrl({ ..., throw: false })
 ```
 Status text: `Dropbox: ✓ 2m ago` / `Dropbox: ✓` (never synced) / `Dropbox: ⟳ 12/40` / `Dropbox: offline` / `Dropbox: ⚠ Needs review` / `Dropbox: ✕ <message>` / `Dropbox: ⚠ Re-authenticate` / `Dropbox: not connected`.
 
-`ObsidianLocalStore`: `list` walks `adapter.list` from the vault root; `stat` via `adapter.stat`; `read` via `adapter.readBinary`; `write` marks the path in `selfWrites`, creates parents with `adapter.mkdir`, uses `vault.process` for `.md` files present in the vault index (so open editors reload), else `adapter.writeBinary(path, data, { mtime })`; `trash` uses `app.fileManager.trashFile` for indexed files (honours the user's trash setting), else `adapter.trashLocal`; `rename` uses `vault.rename` for indexed files (no link updating), else `adapter.rename`; marks both paths.
+`ObsidianLocalStore`: `list` walks `adapter.list` from the vault root; `stat` via `adapter.stat`; `read` via `adapter.readBinary`; `write` wraps the operation with `selfWrites.begin(path)` (and marks after completion in `finally`), creates parents with `adapter.mkdir`, uses `vault.process` for `.md` files present in the vault index (so open editors reload), else `adapter.writeBinary(path, data, { mtime })`; `trash` wraps with `selfWrites.begin(path)` and uses `app.fileManager.trashFile` for indexed files (honours the user's trash setting), else `adapter.trashLocal`; `rename` wraps both paths with `selfWrites.begin` and uses `vault.rename` for indexed files (no link updating), else `adapter.rename`.
 
-`main.ts` wiring: load settings (resolve empty `remoteFolder` to vault name and empty `deviceName` via `defaultDeviceName(Platform)`); build `DropboxAuth`, `DropboxRemote`, `IdbStateStore.open(\`dropbox-vault-sync-${this.app.appId}\`)`, `PathFilter` (`configDir = vault.configDir`, `pluginDir = this.manifest.dir`), `SyncEngine`, `Scheduler`. `registerObsidianProtocolHandler('dropbox-vault-sync-auth', p => auth.completeAuth(p.code))`. Vault `create`/`modify`/`delete`/`rename` → `scheduler.notifyLocalChange`; `rename` also pushes a rename hint. `registerDomEvent(window, 'focus')` and `document` `visibilitychange` (visible) → `notifyResume`. Start the scheduler in `workspace.onLayoutReady`. Run outcome → status bar state; `needsReview` sets the paused flag and stores the outcome; `auth` → `reauth`; a non-empty `result.conflicts` shows a `Notice` ("N sync conflicts — run 'Show conflicts'"). Commands: `sync-now`, `show-conflicts`, `open-sync-log`, `reset-sync-state` (confirm modal, then `state.reset()`). Status bar click → review modal when paused, else manual sync. Settings tab sections per spec §10 (connect button opens `beginAuth('redirect')` URL; a "Paste code" field uses `manual` mode; workspace toggle shows the churn warning; Advanced has a "Custom Dropbox app key" field that overrides the shipped key and requires reconnecting).
+`main.ts` wiring: load settings (resolve empty `remoteFolder` to vault name and empty `deviceName` via `defaultDeviceName(Platform)`); build `DropboxAuth` (wiring `getPendingAuth` / `savePendingAuth` to `settings.pendingAuth`), `DropboxRemote`, `IdbStateStore.open(\`dropbox-vault-sync-${this.app.appId}\`)`, `PathFilter` (`configDir = vault.configDir`, `pluginDir = this.manifest.dir`), `SyncEngine`, `Scheduler`. `registerObsidianProtocolHandler('dropbox-vault-sync-auth', p => auth.completeAuth(p.code))`. Vault `create`/`modify`/`delete`/`rename` → `scheduler.notifyLocalChange`; `rename` also pushes a rename hint. `registerDomEvent(window, 'focus')` and `document` `visibilitychange` (visible) → `notifyResume`. Start the scheduler in `workspace.onLayoutReady`. Run outcome → status bar state; `needsReview` sets the paused flag and stores the outcome; `auth` → `reauth`; a non-empty `result.conflicts` shows a `Notice` ("N sync conflicts — run 'Show conflicts'"). Commands: `sync-now`, `show-conflicts`, `open-sync-log`, `reset-sync-state` (confirm modal, then `state.reset()`). Status bar click → review modal when paused, else manual sync. Settings tab sections per spec §10 (connect button opens `beginAuth('redirect')` URL; a "Paste code" field uses `manual` mode; workspace toggle shows the churn warning; Advanced has a "Custom Dropbox app key" field that overrides the shipped key and requires reconnecting).
 
 - [ ] **Step 1: Write the failing tests** for `statusText` (one assertion per state, `idle` with `now - 120_000` → `'Dropbox: ✓ 2m ago'`), `defaultDeviceName` (4 cases), `clampMaxFileSizeMB(500) === 150`, `clampMaxFileSizeMB(0) === 1`, and `DEFAULT_SETTINGS` values (`triggers.editDebounceSec === 10`, `triggers.intervalMin === 5`, `maxFileSizeMB === 50`, `baseSizeCapMB === 1`, `guard` `{ maxDeletes: 10, maxPercent: 10 }`, all `configSync` false).
 - [ ] **Step 2: Run** — FAIL. **Step 3: Implement** all files above. **Step 4: Run** `npx vitest run && npm run build && npm run lint:imports` — PASS.
@@ -874,9 +899,9 @@ export class ReviewModal extends Modal { constructor(app: App, reason: ..., summ
 export class ConflictsModal extends SuggestModal<string> { /* lists findConflictCopies(vault files); choosing opens the file */ }
 export const SYNC_LOG_VIEW = 'dropbox-vault-sync-log'; export class SyncLogView extends ItemView {}
 ```
-`summaryLines`: first line explains the reason — `emptyLocal`: "Your local vault appears empty, but N files were synced before. Applying would delete them from Dropbox."; `emptyRemote`: the mirror for Dropbox; `massChange`: "This sync would delete or overwrite N files." — then counts, then up to 200 paths for deletions and config overwrites, then `…and N more`.
+`summaryLines`: first line explains the reason — `emptyLocal`: `"Your local vault appears empty, but ${s.baseCount} files were synced before. Applying would delete them from Dropbox."`; `emptyRemote`: `"Your Dropbox folder appears empty, but ${s.baseCount} files were synced before. Applying would delete them locally."`; `massChange`: `"This sync would delete or overwrite N files."` — then counts, then up to 200 paths for deletions and config overwrites, then `…and N more`.
 
-- [ ] **Step 1: Write the failing tests**: `findConflictCopies` matches `'a/Note (conflict 2026-10-13 2142 iPhone).md'` and `'.gitignore (conflict 2026-10-13 2142 Desktop)'`, rejects `'Note (conflict notes).md'`; `summaryLines('massChange', …)` with 250 remote deletes has 200 path lines and ends with `'…and 50 more'`; `emptyLocal` first line contains the base count.
+- [ ] **Step 1: Write the failing tests**: `findConflictCopies` matches `'a/Note (conflict 2026-10-13 2142 iPhone).md'` and `'.gitignore (conflict 2026-10-13 2142 Desktop)'`, rejects `'Note (conflict notes).md'`; `summaryLines('massChange', …)` with 250 remote deletes has 200 path lines and ends with `'…and 50 more'`; `emptyLocal` first line contains `s.baseCount`.
 - [ ] **Step 2: Run** — FAIL. **Step 3: Implement**; wire `ReviewModal` choices to `engine.run({ trigger: 'manual', approval })` and clear the paused flag on `all`/`noDeletes`. **Step 4: Run** tests + `npm run build` — PASS.
 - [ ] **Step 5: Manual check**: delete 15 files on dropbox.com → status bar shows `⚠ Needs review`; modal lists them; "Apply without deletions" restores normal status and keeps files locally.
 - [ ] **Step 6: Commit** `feat: review modal, conflicts list and sync log`

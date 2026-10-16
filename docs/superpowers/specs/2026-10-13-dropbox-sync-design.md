@@ -72,7 +72,7 @@ Principles:
 
 - Each user connects **their own Dropbox account**; their vault is stored in their own Dropbox under `/Apps/<app name>/`. The plugin author never has access to user files or tokens — there is no server and no client secret.
 - The plugin author registers one Dropbox app and ships its app key (public client, PKCE, no secret); the key only identifies the app on Dropbox's consent screen. End users register nothing. Access type: **App folder**. The app must be submitted for Dropbox production approval before it exceeds 50 linked users. An advanced setting allows a custom app key for users who prefer their own.
-- Redirect via `registerObsidianProtocolHandler` (`obsidian://dropbox-sync-auth`) on desktop and mobile; fallback is the no-redirect flow where the user pastes the authorization code.
+- Redirect via `registerObsidianProtocolHandler` (`obsidian://dropbox-vault-sync-auth`) on desktop and mobile (with PKCE verifier persisted across app suspension); fallback is the no-redirect flow where the user pastes the authorization code.
 - `token_access_type=offline` yields a refresh token. Access tokens refresh automatically on 401 or before expiry.
 - Tokens stored in the plugin's `data.json`. The plugin's folder is always excluded from sync, so tokens and state stay per device.
 

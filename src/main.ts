@@ -12,7 +12,6 @@ import { SelfWriteTracker } from './scheduler/SelfWriteTracker';
 import {
   DEFAULT_SETTINGS,
   DropboxSyncSettings,
-  SHIPPED_APP_KEY,
   defaultDeviceName,
 } from './settings';
 import { IdbStateStore } from './state/IdbStateStore';
@@ -419,7 +418,7 @@ export default class DropboxVaultSyncPlugin extends Plugin {
   reinitAuth(): void {
     this.auth = new DropboxAuth({
       http: obsidianHttp,
-      appKey: this.settings.appKey || SHIPPED_APP_KEY,
+      appKey: this.settings.appKey,
       getRefreshToken: () => this.settings.refreshToken,
       saveConnection: async (refreshToken, accountEmail) => {
         this.settings.refreshToken = refreshToken;

@@ -1,6 +1,6 @@
 # Dropbox App Setup Guide
 
-This guide is for the plugin maintainer or users who wish to register their own custom Dropbox App.
+Dropbox Vault Sync ships **no** Dropbox app key and no secret. Each user registers their own free Dropbox app (about 5 minutes, once) and pastes its App key into the plugin. Your files and tokens never touch anyone else's app or account. Do this once; on your other devices paste the same App key.
 
 ---
 
@@ -42,16 +42,12 @@ This guide is for the plugin maintainer or users who wish to register their own 
 
 ---
 
-## 4. Embedding or Customizing the App Key
+## 4. Enter the App Key in Obsidian
 
-- **For Maintainers:** Place the registered App Key into `SHIPPED_APP_KEY` in `src/settings.ts`.
-- **For Users:** If using a personal app, paste your App Key into the **Custom App Key** field under the plugin's settings tab in Obsidian.
+Open **Settings → Community plugins → Dropbox Vault Sync**, paste the App key into **Dropbox app key**, then click **Connect**. The App key is an identifier, not a secret; never use or share an App secret.
 
 ---
 
-## 5. Applying for Production Status
+## 5. Production status
 
-In Development mode, Dropbox limits your app to 50 connected user accounts. Before publishing for public community use or exceeding 50 users:
-1. Go to the **Settings** tab in the Dropbox console.
-2. Click **Apply for production status**.
-3. Provide details describing the app's purpose (vault backup and sync across user devices).
+Not needed. A development-mode app is limited to 50 linked accounts, and here only you use your app.

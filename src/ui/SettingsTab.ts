@@ -32,6 +32,22 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
         });
     } else {
       new Setting(containerEl)
+        .setName('Dropbox app key')
+        .setDesc(
+          'Create your own free Dropbox app and paste its App key here. Nothing is shared with the plugin author. See docs/dropbox-app-setup.md in the plugin repository.',
+        )
+        .addText((text) => {
+          text
+            .setPlaceholder('App key')
+            .setValue(this.plugin.settings.appKey)
+            .onChange(async (val) => {
+              this.plugin.settings.appKey = val.trim();
+              await this.plugin.saveSettings();
+              this.plugin.reinitAuth();
+            });
+        });
+
+      new Setting(containerEl)
         .setName('Connect to Dropbox')
         .setDesc('Authorize this plugin to sync your vault with Dropbox.')
         .addButton((btn) => {
@@ -39,6 +55,10 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
             .setButtonText('Connect')
             .setCta()
             .onClick(async () => {
+              if (!this.plugin.settings.appKey) {
+                new Notice('Enter your Dropbox app key first');
+                return;
+              }
               try {
                 const url = await this.plugin.auth.beginAuth('redirect');
                 window.open(url);
@@ -65,6 +85,10 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
         })
         .addButton((btn) => {
           btn.setButtonText('Get code').onClick(async () => {
+            if (!this.plugin.settings.appKey) {
+              new Notice('Enter your Dropbox app key first');
+              return;
+            }
             try {
               const url = await this.plugin.auth.beginAuth('manual');
               window.open(url);
@@ -355,25 +379,6 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
 
     // Section 7: Advanced
     containerEl.createEl('h3', { text: 'Advanced' });
-
-    new Setting(containerEl)
-      .setName('Custom Dropbox app key')
-      .setDesc('Overrides the shipped app key. Changing this requires reconnecting your Dropbox account.')
-      .addText((text) => {
-        text
-          .setPlaceholder('Shipped default')
-          .setValue(this.plugin.settings.appKey)
-          .onChange(async (val) => {
-            const trimmed = val.trim();
-            const oldKey = this.plugin.settings.appKey;
-            this.plugin.settings.appKey = trimmed;
-            await this.plugin.saveSettings();
-            this.plugin.reinitAuth();
-            if (oldKey !== trimmed && this.plugin.settings.refreshToken) {
-              new Notice('App key changed. Please disconnect and reconnect your Dropbox account.');
-            }
-          });
-      });
 
     new Setting(containerEl)
       .setName('Verbose logging')

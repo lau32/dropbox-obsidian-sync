@@ -2,8 +2,6 @@ import type { PendingAuthState } from './auth/DropboxAuth';
 import type { ConfigSyncSettings } from './filter/PathFilter';
 import type { TriggerSettings } from './scheduler/Scheduler';
 
-export const SHIPPED_APP_KEY = '';
-
 export interface DropboxSyncSettings {
   appKey: string;
   refreshToken: string | null;
@@ -21,7 +19,7 @@ export interface DropboxSyncSettings {
 }
 
 export const DEFAULT_SETTINGS: DropboxSyncSettings = {
-  appKey: SHIPPED_APP_KEY,
+  appKey: '',
   refreshToken: null,
   accountEmail: null,
   pendingAuth: null,

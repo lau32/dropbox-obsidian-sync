@@ -278,6 +278,31 @@ describe('DropboxAuth', () => {
     expect(savedCalls).toEqual([{ rt: null, email: null }]);
   });
 
+  it('throws AuthError without clearing connection when refresh returns 401', async () => {
+    const { http } = scriptedHttp([
+      {
+        status: 401,
+        json: {
+          error: 'invalid_client',
+          error_description: 'invalid client_id',
+        },
+      },
+    ]);
+
+    const savedCalls: Array<{ rt: string | null; email: string | null }> = [];
+    const auth = new DropboxAuth({
+      http,
+      appKey: 'bad-app-key',
+      getRefreshToken: () => 'valid-refresh-token',
+      saveConnection: async (rt, email) => {
+        savedCalls.push({ rt, email });
+      },
+    });
+
+    await expect(auth.getAccessToken()).rejects.toBeInstanceOf(AuthError);
+    expect(savedCalls).toEqual([]);
+  });
+
   it('throws AuthError when no refresh token is available', async () => {
     const { http, requests } = scriptedHttp([]);
     const auth = new DropboxAuth({

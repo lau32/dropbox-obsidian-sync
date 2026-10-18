@@ -208,13 +208,15 @@ export class DropboxAuth {
       body: params.toString(),
     });
 
-    if (res.status === 400 || res.status === 401) {
+    if (res.status >= 500) {
+      throw new NetworkError(`Dropbox token server error (${res.status})`);
+    }
+
+    if (res.status !== 200) {
       this.accessToken = null;
       this.expiresAt = 0;
       const errBody = tryParseJson(res.text());
       if (res.status === 400 && errBody?.error === 'invalid_grant') {
-        await this.saveConnection(null, null);
-      } else if (res.status === 401) {
         await this.saveConnection(null, null);
       }
       const desc =
@@ -222,14 +224,6 @@ export class DropboxAuth {
           ? errBody.error_description
           : `Token refresh failed with status ${res.status}`;
       throw new AuthError(desc);
-    }
-
-    if (res.status >= 500) {
-      throw new NetworkError(`Dropbox token server error (${res.status})`);
-    }
-
-    if (res.status !== 200) {
-      throw new AuthError(`Token refresh failed with status ${res.status}`);
     }
 
     const data = tryParseJson(res.text());

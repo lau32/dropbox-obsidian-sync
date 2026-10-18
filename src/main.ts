@@ -17,8 +17,11 @@ import {
 } from './settings';
 import { IdbStateStore } from './state/IdbStateStore';
 import type { TriggerReason, WriteMode } from './types';
+import { ConflictsModal } from './ui/ConflictsModal';
+import { ReviewModal } from './ui/ReviewModal';
 import { DropboxSyncSettingTab } from './ui/SettingsTab';
 import { StatusBar } from './ui/StatusBar';
+import { SYNC_LOG_VIEW, SyncLogView } from './ui/SyncLogView';
 
 class DelegatingRemoteStore implements RemoteStore {
   constructor(private readonly getRemote: () => RemoteStore) {}
@@ -318,6 +321,12 @@ export default class DropboxVaultSyncPlugin extends Plugin {
       }
     });
 
+    // Register sync log view
+    this.registerView(
+      SYNC_LOG_VIEW,
+      (leaf) => new SyncLogView(leaf, () => this.state),
+    );
+
     // Commands
     this.addCommand({
       id: 'sync-now',
@@ -337,7 +346,14 @@ export default class DropboxVaultSyncPlugin extends Plugin {
       id: 'open-sync-log',
       name: 'Open sync log',
       callback: () => {
-        this.openSyncLog();
+        void this.openSyncLog();
+      },
+    });
+    this.addCommand({
+      id: 'review-pending-sync',
+      name: 'Review pending sync',
+      callback: () => {
+        this.openReviewModal();
       },
     });
     this.addCommand({
@@ -514,18 +530,52 @@ export default class DropboxVaultSyncPlugin extends Plugin {
   }
 
   showConflicts(): void {
-    new Notice(
-      "Showing conflicts is available in the command palette ('Show conflicts').",
-    );
+    new ConflictsModal(this.app).open();
   }
 
-  openSyncLog(): void {
-    new Notice('Sync log view will open recent sync history.');
+  async openSyncLog(): Promise<void> {
+    const { workspace } = this.app;
+    let leaf = workspace.getLeavesOfType(SYNC_LOG_VIEW)[0];
+    if (!leaf) {
+      const rightLeaf = workspace.getRightLeaf(false);
+      if (rightLeaf) {
+        leaf = rightLeaf;
+        await leaf.setViewState({ type: SYNC_LOG_VIEW, active: true });
+      }
+    }
+    if (leaf) {
+      workspace.revealLeaf(leaf);
+    }
   }
 
   openReviewModal(): void {
-    new Notice(
-      'Sync paused: changes exceeded guardrail threshold. Review required.',
+    if (
+      !this.lastNeedsReviewOutcome ||
+      this.lastNeedsReviewOutcome.status !== 'needsReview'
+    ) {
+      new Notice('No sync review currently pending.');
+      return;
+    }
+    const outcome = this.lastNeedsReviewOutcome;
+    const modal = new ReviewModal(
+      this.app,
+      outcome.reason,
+      outcome.summary,
+      async (choice) => {
+        if (choice === 'cancel') {
+          new Notice('Sync review cancelled. Sync remains paused.');
+          return;
+        }
+        this.isPaused = false;
+        this.lastNeedsReviewOutcome = null;
+        new Notice(
+          `Applying sync (${
+            choice === 'noDeletes' ? 'without deletions' : 'all changes'
+          })...`,
+        );
+        await this.runSync('manual', choice);
+      },
     );
+    modal.open();
   }
 }

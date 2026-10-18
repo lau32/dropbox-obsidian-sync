@@ -159,24 +159,7 @@ export default class DropboxVaultSyncPlugin extends Plugin {
     this.selfWrites = new SelfWriteTracker();
     this.localStore = new ObsidianLocalStore(this.app, this.selfWrites);
 
-    this.auth = new DropboxAuth({
-      http: obsidianHttp,
-      appKey: this.settings.appKey || SHIPPED_APP_KEY,
-      getRefreshToken: () => this.settings.refreshToken,
-      saveConnection: async (refreshToken, accountEmail) => {
-        this.settings.refreshToken = refreshToken;
-        this.settings.accountEmail = accountEmail;
-        await this.saveSettings();
-        if (!refreshToken) {
-          this.statusBar?.setState({ kind: 'disconnected' });
-        }
-      },
-      getPendingAuth: () => this.settings.pendingAuth,
-      savePendingAuth: async (pending) => {
-        this.settings.pendingAuth = pending;
-        await this.saveSettings();
-      },
-    });
+    this.reinitAuth();
 
     const getRemote = () => {
       return new DropboxRemote({
@@ -245,6 +228,7 @@ export default class DropboxVaultSyncPlugin extends Plugin {
         }
         try {
           const resPromise = getRemote().longpoll(meta.cursor, 30);
+          resPromise.catch(() => {});
           const abortPromise = new Promise<'timeout'>((resolve) => {
             signal.addEventListener('abort', () => resolve('timeout'), {
               once: true,
@@ -317,7 +301,9 @@ export default class DropboxVaultSyncPlugin extends Plugin {
     );
     this.registerEvent(
       this.app.vault.on('rename', (file, oldPath) => {
-        renameHints.push({ from: oldPath, to: file.path });
+        if (!this.selfWrites.isSelfWrite(file.path)) {
+          renameHints.push({ from: oldPath, to: file.path });
+        }
         this.scheduler.notifyLocalChange(file.path);
       }),
     );
@@ -414,12 +400,34 @@ export default class DropboxVaultSyncPlugin extends Plugin {
     await this.saveData(this.settings);
   }
 
+  reinitAuth(): void {
+    this.auth = new DropboxAuth({
+      http: obsidianHttp,
+      appKey: this.settings.appKey || SHIPPED_APP_KEY,
+      getRefreshToken: () => this.settings.refreshToken,
+      saveConnection: async (refreshToken, accountEmail) => {
+        this.settings.refreshToken = refreshToken;
+        this.settings.accountEmail = accountEmail;
+        await this.saveSettings();
+        if (!refreshToken) {
+          this.statusBar?.setState({ kind: 'disconnected' });
+        }
+      },
+      getPendingAuth: () => this.settings.pendingAuth,
+      savePendingAuth: async (pending) => {
+        this.settings.pendingAuth = pending;
+        await this.saveSettings();
+      },
+    });
+  }
+
   async disconnect(): Promise<void> {
     await this.auth.disconnect();
     this.settings.refreshToken = null;
     this.settings.accountEmail = null;
     this.settings.pendingAuth = null;
     await this.saveSettings();
+    this.reinitAuth();
     this.statusBar?.setState({ kind: 'disconnected' });
   }
 

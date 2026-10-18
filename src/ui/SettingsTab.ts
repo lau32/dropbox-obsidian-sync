@@ -368,6 +368,7 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
             const oldKey = this.plugin.settings.appKey;
             this.plugin.settings.appKey = trimmed;
             await this.plugin.saveSettings();
+            this.plugin.reinitAuth();
             if (oldKey !== trimmed && this.plugin.settings.refreshToken) {
               new Notice('App key changed. Please disconnect and reconnect your Dropbox account.');
             }

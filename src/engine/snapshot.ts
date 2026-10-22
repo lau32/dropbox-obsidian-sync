@@ -43,7 +43,7 @@ export async function takeSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
     await state.applyRemoteChanges(upserts, cursor, true);
   };
 
-  if (meta.cursor === null) {
+  if (!meta.cursor) {
     await syncFullRemote();
   } else {
     try {

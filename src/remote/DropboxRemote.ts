@@ -225,7 +225,7 @@ export class DropboxRemote implements RemoteStore {
       this.checkCommonErrors(summary);
       if (res.status === 409 && summary.startsWith('path/not_found')) {
         await this.createFolder('');
-        return { entries: [], cursor: '' };
+        return this.listAll();
       }
       throw new RemotePathError('', summary);
     }

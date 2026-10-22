@@ -453,7 +453,7 @@ describe('DropboxRemote & encodeApiArg', () => {
     });
   });
 
-  test('listAll with 409 path/not_found/ sends create_folder_v2 request, then returns empty result', async () => {
+  test('listAll with 409 path/not_found/ sends create_folder_v2 request, then re-lists to get a real cursor', async () => {
     const { http, requests } = scriptedHttp([
       {
         status: 409,
@@ -469,6 +469,7 @@ describe('DropboxRemote & encodeApiArg', () => {
           },
         },
       },
+      { status: 200, json: { entries: [], cursor: 'cur-new', has_more: false } },
     ]);
 
     const remote = new DropboxRemote({
@@ -480,7 +481,8 @@ describe('DropboxRemote & encodeApiArg', () => {
 
     const res = await remote.listAll();
     expect(res.entries).toEqual([]);
-    expect(requests).toHaveLength(2);
+    expect(res.cursor).toBe('cur-new');
+    expect(requests).toHaveLength(3);
     expect(requests[0].url).toBe('https://api.dropboxapi.com/2/files/list_folder');
     expect(requests[1].url).toBe('https://api.dropboxapi.com/2/files/create_folder_v2');
     expect(JSON.parse(requests[1].body as string)).toEqual({

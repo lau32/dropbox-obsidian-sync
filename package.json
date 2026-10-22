@@ -1,6 +1,6 @@
 {
   "name": "dropbox-vault-sync",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Dropbox Vault Sync plugin for Obsidian",
   "main": "main.js",
   "scripts": {

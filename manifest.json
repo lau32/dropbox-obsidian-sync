@@ -1,7 +1,7 @@
 {
   "id": "dropbox-vault-sync",
   "name": "Dropbox Vault Sync",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "minAppVersion": "1.7.2",
   "description": "Sync vault notes and attachments with Dropbox across desktop and mobile.",
   "author": "Laurentiu Amagdei",

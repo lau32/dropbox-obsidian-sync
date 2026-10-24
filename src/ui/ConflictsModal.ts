@@ -21,13 +21,13 @@ export class ConflictsModal extends SuggestModal<string> {
   }
 
   renderSuggestion(value: string, el: HTMLElement): void {
-    el.createEl('div', { text: value });
+    el.createDiv({ text: value });
   }
 
   onChooseSuggestion(item: string, _evt: MouseEvent | KeyboardEvent): void {
     const file = this.app.vault.getAbstractFileByPath(item);
     if (file instanceof TFile) {
-      this.app.workspace.getLeaf().openFile(file);
+      void this.app.workspace.getLeaf().openFile(file);
     } else {
       new Notice(`Could not open file: ${item}`);
     }

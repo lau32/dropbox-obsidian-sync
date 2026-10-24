@@ -20,7 +20,7 @@ export class ReviewModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    contentEl.createEl('h2', { text: 'Dropbox Vault Sync — Review Required' });
+    new Setting(contentEl).setName('Review required').setHeading();
 
     const lines = summaryLines(this.reason, this.summary);
     if (lines.length > 0) {
@@ -31,11 +31,11 @@ export class ReviewModal extends Modal {
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i];
       if (line.startsWith('- ')) {
-        container.createEl('div', { text: line, cls: 'dropbox-sync-review-path' });
+        container.createDiv({ text: line, cls: 'dropbox-sync-review-path' });
       } else if (line.startsWith('…and')) {
-        container.createEl('div', { text: line, cls: 'dropbox-sync-review-overflow' });
+        container.createDiv({ text: line, cls: 'dropbox-sync-review-overflow' });
       } else {
-        container.createEl('div', { text: line, cls: 'dropbox-sync-review-stat' });
+        container.createDiv({ text: line, cls: 'dropbox-sync-review-stat' });
       }
     }
 
@@ -43,7 +43,7 @@ export class ReviewModal extends Modal {
       .addButton((btn) =>
         btn
           .setButtonText('Apply all changes')
-          .setWarning()
+          .setDestructive()
           .onClick(() => {
             this.choose('all');
           }),

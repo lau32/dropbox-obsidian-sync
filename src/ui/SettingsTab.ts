@@ -11,10 +11,8 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl('h2', { text: 'Dropbox Vault Sync' });
-
     // Section 1: Dropbox Account
-    containerEl.createEl('h3', { text: 'Dropbox account' });
+    new Setting(containerEl).setName('Dropbox account').setHeading();
 
     if (this.plugin.settings.refreshToken) {
       new Setting(containerEl)
@@ -23,7 +21,7 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
         .addButton((btn) => {
           btn
             .setButtonText('Disconnect')
-            .setWarning()
+            .setDestructive()
             .onClick(async () => {
               await this.plugin.disconnect();
               new Notice('Disconnected from Dropbox');
@@ -124,7 +122,7 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
     }
 
     // Section 2: Vault & Device
-    containerEl.createEl('h3', { text: 'Vault and device' });
+    new Setting(containerEl).setName('Vault and device').setHeading();
 
     new Setting(containerEl)
       .setName('Remote folder')
@@ -151,7 +149,7 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
       });
 
     // Section 3: Sync Triggers
-    containerEl.createEl('h3', { text: 'Sync triggers' });
+    new Setting(containerEl).setName('Sync triggers').setHeading();
 
     new Setting(containerEl)
       .setName('Sync on startup')
@@ -244,7 +242,7 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
       });
 
     // Section 4: Configuration Sync (.obsidian)
-    containerEl.createEl('h3', { text: 'Obsidian configuration sync' });
+    new Setting(containerEl).setName('Obsidian configuration sync').setHeading();
 
     new Setting(containerEl)
       .setName('Core settings')
@@ -297,7 +295,7 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
       });
 
     // Section 5: Filters & File Limits
-    containerEl.createEl('h3', { text: 'Filters and file limits' });
+    new Setting(containerEl).setName('Filters and file limits').setHeading();
 
     new Setting(containerEl)
       .setName('Excluded paths')
@@ -345,7 +343,7 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
       });
 
     // Section 6: Guardrails
-    containerEl.createEl('h3', { text: 'Guardrails' });
+    new Setting(containerEl).setName('Guardrails').setHeading();
 
     new Setting(containerEl)
       .setName('Max deletions threshold (count)')
@@ -378,7 +376,7 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
       });
 
     // Section 7: Advanced
-    containerEl.createEl('h3', { text: 'Advanced' });
+    new Setting(containerEl).setName('Advanced').setHeading();
 
     new Setting(containerEl)
       .setName('Verbose logging')
@@ -397,7 +395,7 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
       .setDesc('View recent sync runs, actions, merges, and conflicts.')
       .addButton((btn) => {
         btn.setButtonText('Open log').onClick(() => {
-          this.plugin.openSyncLog();
+          void this.plugin.openSyncLog();
         });
       });
 
@@ -407,7 +405,7 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
       .addButton((btn) => {
         btn
           .setButtonText('Reset sync state')
-          .setWarning()
+          .setDestructive()
           .onClick(() => {
             this.plugin.confirmResetSyncState();
           });

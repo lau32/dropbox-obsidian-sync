@@ -34,7 +34,7 @@ const DEFAULT_EXPIRES_IN_SECONDS = 14_400;
 
 function tryParseJson(text: string): Record<string, unknown> | null {
   try {
-    const parsed = JSON.parse(text);
+    const parsed: unknown = JSON.parse(text);
     return typeof parsed === 'object' && parsed !== null
       ? (parsed as Record<string, unknown>)
       : null;

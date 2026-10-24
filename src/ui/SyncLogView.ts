@@ -37,7 +37,7 @@ export class SyncLogView extends ItemView {
 
     const refreshBtn = header.createEl('button', { text: 'Refresh' });
     refreshBtn.onclick = () => {
-      this.render();
+      void this.render();
     };
 
     const logList = containerEl.createDiv({ cls: 'dropbox-sync-log-list' });
@@ -65,13 +65,13 @@ export class SyncLogView extends ItemView {
 
       const topRow = card.createDiv({ cls: 'dropbox-sync-log-row-top' });
       topRow.createEl('strong', { text: timeStr });
-      topRow.createEl('span', {
+      topRow.createSpan({
         text: ` [${entry.trigger}] — ${entry.status} (${durationSec}s)`,
         cls: `dropbox-sync-status-${entry.status}`,
       });
 
       const statsRow = card.createDiv({ cls: 'dropbox-sync-log-row-stats' });
-      statsRow.createEl('span', {
+      statsRow.createSpan({
         text: `Actions: ${entry.actions.length} | Merged: ${entry.merged.length} | Conflicts: ${entry.conflicts.length} | Errors: ${entry.errors.length}`,
       });
 

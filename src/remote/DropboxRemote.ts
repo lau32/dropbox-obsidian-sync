@@ -41,7 +41,7 @@ function formatClientModified(ms: number): string {
 
 function tryParseJson(text: string): Record<string, unknown> | null {
   try {
-    const parsed = JSON.parse(text);
+    const parsed: unknown = JSON.parse(text);
     return typeof parsed === 'object' && parsed !== null
       ? (parsed as Record<string, unknown>)
       : null;
@@ -83,7 +83,7 @@ export class DropboxRemote implements RemoteStore {
     this.root = opts.root;
     this.getAccessToken = opts.getAccessToken;
     this.refreshAccessToken = opts.refreshAccessToken;
-    this.sleep = opts.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.sleep = opts.sleep ?? ((ms) => new Promise((resolve) => window.setTimeout(resolve, ms)));
     this.maxRetries = opts.maxRetries ?? 5;
   }
 

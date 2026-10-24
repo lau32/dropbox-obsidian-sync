@@ -21,8 +21,8 @@ export interface SchedulerOptions {
 
 export class Scheduler {
   private isRunning = false;
-  private editDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  private intervalTimer: ReturnType<typeof setTimeout> | null = null;
+  private editDebounceTimer: number | null = null;
+  private intervalTimer: number | null = null;
   private abortController: AbortController | null = null;
 
   private activeRun: Promise<void> | null = null;
@@ -58,12 +58,12 @@ export class Scheduler {
     this.isRunning = false;
 
     if (this.editDebounceTimer !== null) {
-      clearTimeout(this.editDebounceTimer);
+      window.clearTimeout(this.editDebounceTimer);
       this.editDebounceTimer = null;
     }
 
     if (this.intervalTimer !== null) {
-      clearTimeout(this.intervalTimer);
+      window.clearTimeout(this.intervalTimer);
       this.intervalTimer = null;
     }
 
@@ -87,14 +87,14 @@ export class Scheduler {
     if (this.opts.selfWrites.isSelfWrite(path)) return;
 
     if (this.editDebounceTimer !== null) {
-      clearTimeout(this.editDebounceTimer);
+      window.clearTimeout(this.editDebounceTimer);
       this.editDebounceTimer = null;
     }
 
     const sec = this.opts.settings().editDebounceSec;
     const ms = Math.max(0, sec) * 1000;
 
-    this.editDebounceTimer = setTimeout(() => {
+    this.editDebounceTimer = window.setTimeout(() => {
       this.editDebounceTimer = null;
       if (!this.isRunning) return;
       if (this.opts.isPaused()) return;
@@ -187,7 +187,7 @@ export class Scheduler {
 
   private scheduleInterval(): void {
     if (this.intervalTimer !== null) {
-      clearTimeout(this.intervalTimer);
+      window.clearTimeout(this.intervalTimer);
       this.intervalTimer = null;
     }
     if (!this.isRunning) return;
@@ -196,7 +196,7 @@ export class Scheduler {
     const intervalMin = s.intervalMin > 0 ? s.intervalMin : 5;
     const intervalMs = intervalMin * 60 * 1000;
 
-    this.intervalTimer = setTimeout(() => {
+    this.intervalTimer = window.setTimeout(() => {
       this.intervalTimer = null;
       if (!this.isRunning) return;
       const current = this.opts.settings();
@@ -240,16 +240,16 @@ export class Scheduler {
         resolve();
         return;
       }
-      let timer: ReturnType<typeof setTimeout> | null = null;
+      let timer: number | null = null;
       const onAbort = () => {
         if (timer !== null) {
-          clearTimeout(timer);
+          window.clearTimeout(timer);
           timer = null;
         }
         signal.removeEventListener('abort', onAbort);
         resolve();
       };
-      timer = setTimeout(() => {
+      timer = window.setTimeout(() => {
         timer = null;
         signal.removeEventListener('abort', onAbort);
         resolve();

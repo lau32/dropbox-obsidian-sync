@@ -217,11 +217,11 @@ export default class DropboxVaultSyncPlugin extends Plugin {
         if (!meta.cursor) {
           return new Promise((resolve) => {
             const onAbort = () => {
-              clearTimeout(t);
+              window.clearTimeout(t);
               signal.removeEventListener('abort', onAbort);
               resolve('timeout');
             };
-            const t = setTimeout(() => {
+            const t = window.setTimeout(() => {
               signal.removeEventListener('abort', onAbort);
               resolve('timeout');
             }, 30_000);
@@ -378,7 +378,7 @@ export default class DropboxVaultSyncPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const data = await this.loadData();
+    const data = (await this.loadData()) as Partial<DropboxSyncSettings> | null;
     this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
 
     if (data?.triggers) {
@@ -465,7 +465,7 @@ export default class DropboxVaultSyncPlugin extends Plugin {
     approval?: 'all' | 'noDeletes',
   ): Promise<void> {
     if (this.settings.verboseLogging) {
-      console.log(`[DropboxVaultSync] Starting sync (trigger: ${trigger})`);
+      console.debug(`[DropboxVaultSync] Starting sync (trigger: ${trigger})`);
     }
     this.statusBar?.setState({ kind: 'syncing', done: 0, total: 0 });
 
@@ -478,7 +478,7 @@ export default class DropboxVaultSyncPlugin extends Plugin {
     });
 
     if (this.settings.verboseLogging) {
-      console.log('[DropboxVaultSync] Sync finished with outcome:', outcome);
+      console.debug('[DropboxVaultSync] Sync finished with outcome:', outcome);
     }
 
     if (outcome.status === 'ok') {
@@ -560,7 +560,7 @@ export default class DropboxVaultSyncPlugin extends Plugin {
       this.app,
       outcome.reason,
       outcome.summary,
-      async (choice) => {
+      (choice) => {
         if (choice === 'cancel') {
           new Notice('Sync review cancelled. Sync remains paused.');
           return;
@@ -572,7 +572,7 @@ export default class DropboxVaultSyncPlugin extends Plugin {
             choice === 'noDeletes' ? 'without deletions' : 'all changes'
           })...`,
         );
-        await this.runSync('manual', choice);
+        void this.runSync('manual', choice);
       },
     );
     modal.open();

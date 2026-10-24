@@ -4,7 +4,7 @@ import { statusText } from './statusText';
 export class StatusBar {
   private state: StatusState = { kind: 'disconnected' };
   private readonly element: HTMLElement;
-  private intervalTimer: ReturnType<typeof setInterval> | null = null;
+  private intervalTimer: number | null = null;
 
   constructor(element: HTMLElement, onClick: () => void) {
     this.element = element;
@@ -12,7 +12,7 @@ export class StatusBar {
     this.element.addEventListener('click', onClick);
     this.render();
 
-    this.intervalTimer = setInterval(() => {
+    this.intervalTimer = window.setInterval(() => {
       if (this.state.kind === 'idle') {
         this.render();
       }
@@ -30,7 +30,7 @@ export class StatusBar {
 
   destroy(): void {
     if (this.intervalTimer !== null) {
-      clearInterval(this.intervalTimer);
+      window.clearInterval(this.intervalTimer);
       this.intervalTimer = null;
     }
   }

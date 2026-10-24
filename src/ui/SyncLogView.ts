@@ -17,7 +17,7 @@ export class SyncLogView extends ItemView {
   }
 
   getDisplayText(): string {
-    return 'Dropbox Sync Log';
+    return 'Dropbox sync log';
   }
 
   getIcon(): string {
@@ -33,7 +33,7 @@ export class SyncLogView extends ItemView {
     containerEl.empty();
 
     const header = containerEl.createDiv({ cls: 'dropbox-sync-log-header' });
-    header.createEl('h3', { text: 'Sync History' });
+    header.createEl('h3', { text: 'Sync history' });
 
     const refreshBtn = header.createEl('button', { text: 'Refresh' });
     refreshBtn.onclick = () => {

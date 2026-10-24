@@ -43,7 +43,7 @@ export class ReviewModal extends Modal {
       .addButton((btn) =>
         btn
           .setButtonText('Apply all changes')
-          .setDestructive()
+          .then((b) => b.buttonEl.addClass('mod-warning'))
           .onClick(() => {
             this.choose('all');
           }),

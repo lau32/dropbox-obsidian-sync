@@ -21,7 +21,7 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
         .addButton((btn) => {
           btn
             .setButtonText('Disconnect')
-            .setDestructive()
+            .then((b) => b.buttonEl.addClass('mod-warning'))
             .onClick(async () => {
               await this.plugin.disconnect();
               new Notice('Disconnected from Dropbox');
@@ -74,7 +74,7 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
       new Setting(containerEl)
         .setName('Manual authorization')
         .setDesc(
-          'If the redirect does not open Obsidian, click "Get code", authorize, and paste the code here.',
+          'If the redirect does not open Obsidian, use the get code button, authorize, and paste the code here.',
         )
         .addText((text) => {
           text.setPlaceholder('Authorization code').onChange((v) => {
@@ -313,8 +313,8 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName('Max file size (MB)')
-      .setDesc('Files larger than this limit are skipped (1 to 150 MB).')
+      .setName('Max file size (megabytes)')
+      .setDesc('Files larger than this limit are skipped (1 to 150 megabytes).')
       .addText((text) => {
         text
           .setValue(String(this.plugin.settings.maxFileSizeMB))
@@ -328,7 +328,7 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName('Merge base size cap (MB)')
+      .setName('Merge base size cap (megabytes)')
       .setDesc('Maximum file size for storing 3-way merge bases.')
       .addText((text) => {
         text
@@ -405,7 +405,7 @@ export class DropboxSyncSettingTab extends PluginSettingTab {
       .addButton((btn) => {
         btn
           .setButtonText('Reset sync state')
-          .setDestructive()
+          .then((b) => b.buttonEl.addClass('mod-warning'))
           .onClick(() => {
             this.plugin.confirmResetSyncState();
           });

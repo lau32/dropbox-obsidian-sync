@@ -29,6 +29,9 @@ jobs:
       - name: Run import lint
         run: npm run lint:imports
 
+      - name: Run ESLint
+        run: npm run lint
+
       - name: Run test suite
         run: npm test
 

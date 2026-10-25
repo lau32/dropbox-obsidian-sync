@@ -140,6 +140,44 @@ describe('DropboxAuth', () => {
     expect(pendingAuth).toBeNull();
   });
 
+  it('completeAuth sends an explicit JSON null body on the account request (Android adds a default Content-Type otherwise)', async () => {
+    const { http, requests } = scriptedHttp([
+      { status: 200, json: { access_token: 'a', refresh_token: 'r' } },
+      { status: 200, json: { email: 'a@example.com' } },
+    ]);
+    const auth = new DropboxAuth({
+      http,
+      appKey: 'k',
+      getRefreshToken: () => null,
+      saveConnection: async () => {},
+    });
+    await auth.beginAuth('manual');
+    await auth.completeAuth('c');
+
+    expect(requests[1].headers['Content-Type']).toBe('application/json');
+    expect(requests[1].body).toBe('null');
+  });
+
+  it('completeAuth still connects when the account lookup fails', async () => {
+    const { http } = scriptedHttp([
+      { status: 200, json: { access_token: 'a', refresh_token: 'r' } },
+      { status: 400, json: { error: 'bad' } },
+    ]);
+    let saved: [string | null, string | null] | null = null;
+    const auth = new DropboxAuth({
+      http,
+      appKey: 'k',
+      getRefreshToken: () => null,
+      saveConnection: async (rt, email) => {
+        saved = [rt, email];
+      },
+    });
+    await auth.beginAuth('manual');
+    await auth.completeAuth('c');
+
+    expect(saved).toEqual(['r', null]);
+  });
+
   it('completeAuth succeeds on a fresh DropboxAuth instance using persisted getPendingAuth (mobile reload)', async () => {
     let persistedPending: PendingAuthState | null = null;
     let savedRefresh: string | null = null;

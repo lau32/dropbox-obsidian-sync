@@ -157,16 +157,17 @@ export class DropboxAuth {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
       },
+      // Explicit JSON null: a bodyless POST picks up a default Content-Type on
+      // some platforms (Android) and Dropbox rejects it with a 400.
+      body: 'null',
     });
 
-    if (accountRes.status !== 200) {
-      throw new AuthError(
-        `Failed to fetch account info (status ${accountRes.status})`,
-      );
-    }
-
-    const accountData = tryParseJson(accountRes.text());
+    // The email is display-only; the tokens are already valid, so don't fail
+    // the whole connection over it.
+    const accountData =
+      accountRes.status === 200 ? tryParseJson(accountRes.text()) : null;
     const email =
       typeof accountData?.email === 'string' ? accountData.email : null;
 
